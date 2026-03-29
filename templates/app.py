@@ -27,5 +27,6 @@ def handle_invitation(data):
     emit('receive_invitation', {'sender': sender}, room=room)
 
 if __name__ == '__main__':
+    # Render가 주는 포트 번호를 받아서 실행해야 한다
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
