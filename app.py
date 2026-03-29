@@ -1,5 +1,5 @@
 import eventlet
-eventlet.monkey_patch() # 1등으로 실행되어야 함
+eventlet.monkey_patch()
 
 import os
 from flask import Flask, render_template, request
