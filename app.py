@@ -1,6 +1,10 @@
+import eventlet
+eventlet.monkey_patch() # 1등으로 실행되어야 함
+
 import os
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit, join_room
+# ... 그 뒤에 나머지 코드들
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'giga_chad_chess_secret'
