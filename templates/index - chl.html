@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GigaChess PvP</title>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #1a1a1a; color: #fff; margin: 0; padding: 20px; }
+        #myBoard { margin: 20px auto; width: 450px; position: relative; }
+        
+        /* [수정] 이미지를 투명하게 만들어 드래그 기능 유지 */
+        .square-55d63 img { opacity: 0; position: absolute; z-index: 10; width: 100%; height: 100%; cursor: grab; }
+        
+        /* [추가] 실제 화면에 보일 유니코드 기물 레이어 */
+        .piece-visual {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 50px; z-index: 5; pointer-events: none; user-select: none;
+        }
+        .white-p { color: #fff; text-shadow: 1px 1px 3px #000; }
+        .black-p { color: #000; }
+        
+        input, button { padding: 12px; margin: 5px; border-radius: 4px; border: none; }
+        button { background: #007bff; color: white; font-weight: bold; cursor: pointer; }
+        
+        /* [수정] 도전장 알림창 가독성 개선 */
+        #invite-alert { 
+            display: none; background: #ffc107; color: #000; padding: 15px; 
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
+            z-index: 1000; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <h1>GIGACHAD CHESS</h1>
+    
+    <div id="invite-alert">
+        <span id="inviter-name"></span>님의 도전! 
+        <button onclick="acceptInvite()" style="background: #28a745;">수락</button>
+        <button onclick="$('#invite-alert').hide()" style="background: #dc3545;">거절</button>
+    </div>
+
+    <div id="login-area">
+        <input type="text" id="username" placeholder="내 ID 입력">
+        <button onclick="login()">접속</button>
+    </div>
+
+    <div id="lobby" style="display:none;">
+        <p>접속 중: <strong id="display-name" style="color:#007bff;"></strong></p>
+        <input type="text" id="target-id" placeholder="상대 ID">
+        <button onclick="sendInvite()">도전장 전송</button>
+    </div>
+
+    <div id="game-area" style="display:none;">
+        <h3 id="player-info">상대 대기 중...</h3>
+        <div id="myBoard"></div>
+    </div>
+
+    <script>
+        var socket = io(), board = null, game = new Chess(), myColor = 'w', currentRoom = null, myName = "";
+        const unicodeMap = {'wK':'♔','wQ':'♕','wR':'♖','wB':'♗','wN':'♘','wP':'♙','bK':'♚','bQ':'♛','bR':'♜','bB':'♝','bN':'♞','bP':'♟'};
+
+        function login() {
+            myName = $('#username').val().trim();
+            if(!myName) return;
+            socket.emit('login', {username: myName});
+            $('#display-name').text(myName);
+            $('#login-area').hide(); $('#lobby').show();
+        }
+
+        function sendInvite() {
+            var target = $('#target-id').val().trim();
+            if(!target) return;
+            socket.emit('send_invite', {sender: myName, target: target});
+            alert(target + "에게 도전장을 보냈다.");
+        }
+
+        // 도전장 수신 이벤트
+        socket.on('receive_invite', function(data) {
+            $('#inviter-name').text(data.from);
+            $('#invite-alert').fadeIn();
+        });
+
+        function acceptInvite() {
+            var from = $('#inviter-name').text();
+            socket.emit('accept_invite', {from: from, to: myName});
+            $('#invite-alert').hide();
+        }
+
+        socket.on('start_game', function(data) {
+            currentRoom = data.room; 
+            myColor = data.color === 'white' ? 'w' : 'b';
+            $('#lobby').hide(); $('#game-area').show();
+            $('#player-info').text("당신은 " + (data.color === 'white' ? "백(White)" : "흑(Black)") + "입니다.");
+            
+            board = Chessboard('myBoard', {
+                draggable: true,
+                orientation: data.color,
+                position: 'start',
+                onDragStart: (source, piece) => {
+                    // 차례가 아니거나 상대방 기물 드래그 방지
+                    if (game.game_over() || 
+                        (myColor === 'w' && piece.search(/^b/) !== -1) || 
+                        (myColor === 'b' && piece.search(/^w/) !== -1)) return false;
+                },
+                onDrop: handleMove,
+                onMoveEnd: () => { updateBoard(); },
+                // 투명한 1px 이미지를 테마로 사용하여 드래그 영역 확보
+                pieceTheme: (p) => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+            });
+            updateBoard();
+        });
+
+        // 유니코드 기물 렌더링 함수
+        function updateBoard() {
+            $('.square-55d63').each(function() {
+                $(this).find('.piece-visual').remove();
+                var p = $(this).find('img').attr('data-piece');
+                if (p) {
+                    var c = p.startsWith('w') ? 'white-p' : 'black-p';
+                    $(this).append('<div class="piece-visual ' + c + '">' + unicodeMap[p] + '</div>');
+                }
+            });
+        }
+
+        function handleMove(source, target) {
+            var move = game.move({from: source, to: target, promotion: 'q'});
+            if (move === null) return 'snapback';
+            socket.emit('move', {room: currentRoom, move: move.san});
+            setTimeout(updateBoard, 50); // 이동 후 즉시 업데이트
+        }
+
+        socket.on('opponent_move', function(data) {
+            game.move(data.move);
+            board.position(game.fen());
+            setTimeout(updateBoard, 50);
+        });
+    </script>
+</body>
+</html>
