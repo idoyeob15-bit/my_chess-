@@ -32,18 +32,23 @@ def handle_invite(data):
         emit('receive_invite', {'from': sender}, room=target)
         print(f"📧 [INVITE] {sender} -> {target}") # 초대 로그 확인
 
-# 3. 도전 수락 (게임 시작)
+# 3. 도전 수락 (게임 시작 세팅)
 @socketio.on('accept_invite')
 def handle_accept(data):
-    inviter = data.get('from')
-    accepter = data.get('to')
+    inviter = data.get('from')   # 초대한 사람 (예: 'a')
+    accepter = data.get('to')     # 수락한 사람 (예: 'b')
+    
     room = f"game_{inviter}_{accepter}"
+    
+    # 수락한 사람(나) 방 입장은 당연히 하고
     join_room(room)
     
-    # 초대한 사람도 해당 방에 조인하게 함 (통신을 위해 중요)
+    # [중요] 서버 측에서 "초대한 사람"도 이 방으로 오라고 신호를 보냄
+    # 프론트엔드에서 이 신호를 받으면 초대한 사람도 join_room을 실행하게 함
     emit('start_game', {'room': room, 'color': 'white'}, room=inviter)
     emit('start_game', {'room': room, 'color': 'black'}, room=accepter)
-    print(f"🎮 [START] Room: {room} ({inviter} vs {accepter})") # 시작 로그 확인
+    
+    print(f"🎮 [START] Room: {room} ({inviter} vs {accepter})")
 
 # 4. 체스 말 이동 공유 (★로그 추가됨!)
 @socketio.on('move')
