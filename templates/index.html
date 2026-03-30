@@ -10,11 +10,7 @@
     <style>
         body { font-family: sans-serif; text-align: center; background: #1a1a1a; color: #fff; margin: 0; padding: 20px; }
         #myBoard { margin: 20px auto; width: 450px; position: relative; }
-        
-        /* [수정] 이미지를 투명하게 만들어 드래그 기능 유지 */
         .square-55d63 img { opacity: 0; position: absolute; z-index: 10; width: 100%; height: 100%; cursor: grab; }
-        
-        /* [추가] 실제 화면에 보일 유니코드 기물 레이어 */
         .piece-visual {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; justify-content: center; align-items: center;
@@ -22,11 +18,8 @@
         }
         .white-p { color: #fff; text-shadow: 1px 1px 3px #000; }
         .black-p { color: #000; }
-        
         input, button { padding: 12px; margin: 5px; border-radius: 4px; border: none; }
         button { background: #007bff; color: white; font-weight: bold; cursor: pointer; }
-        
-        /* [수정] 도전장 알림창 가독성 개선 */
         #invite-alert { 
             display: none; background: #ffc107; color: #000; padding: 15px; 
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
@@ -78,7 +71,6 @@
             alert(target + "에게 도전장을 보냈다.");
         }
 
-        // 도전장 수신 이벤트
         socket.on('receive_invite', function(data) {
             $('#inviter-name').text(data.from);
             $('#invite-alert').fadeIn();
@@ -92,6 +84,7 @@
 
         socket.on('start_game', function(data) {
             currentRoom = data.room; 
+            game = new Chess(); // 게임 객체 초기화
             myColor = data.color === 'white' ? 'w' : 'b';
             $('#lobby').hide(); $('#game-area').show();
             $('#player-info').text("당신은 " + (data.color === 'white' ? "백(White)" : "흑(Black)") + "입니다.");
@@ -101,20 +94,18 @@
                 orientation: data.color,
                 position: 'start',
                 onDragStart: (source, piece) => {
-                    // 차례가 아니거나 상대방 기물 드래그 방지
-                    if (game.game_over() || 
-                        (myColor === 'w' && piece.search(/^b/) !== -1) || 
-                        (myColor === 'b' && piece.search(/^w/) !== -1)) return false;
+                    // [핵심 수정] 게임 종료 확인 + 내 기물만 드래그 가능 + 내 차례인지 확인
+                    if (game.game_over()) return false;
+                    if ((myColor === 'w' && piece.search(/^b/) !== -1) || (myColor === 'b' && piece.search(/^w/) !== -1)) return false;
+                    if ((game.turn() === 'w' && myColor !== 'w') || (game.turn() === 'b' && myColor !== 'b')) return false;
                 },
                 onDrop: handleMove,
                 onMoveEnd: () => { updateBoard(); },
-                // 투명한 1px 이미지를 테마로 사용하여 드래그 영역 확보
                 pieceTheme: (p) => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
             });
             updateBoard();
         });
 
-        // 유니코드 기물 렌더링 함수
         function updateBoard() {
             $('.square-55d63').each(function() {
                 $(this).find('.piece-visual').remove();
@@ -129,25 +120,20 @@
         function handleMove(source, target) {
             var move = game.move({from: source, to: target, promotion: 'q'});
             if (move === null) return 'snapback';
+            
+            // 내 움직임을 서버로 전송
             socket.emit('move', {room: currentRoom, move: move.san});
-            setTimeout(updateBoard, 50); // 이동 후 즉시 업데이트
+            setTimeout(updateBoard, 50);
         }
 
-socket.on('opponent_move', function(data) {
-    // [수정] 상대방이 보낸 수를 내 엔진(game)에 적용한다!
-    var move = game.move(data.move); 
-
-    if (move !== null) {
-        // 엔진이 업데이트됐으니 화면 보드도 그 위치로 이동
-        board.position(game.fen()); 
-        
-        // 유니코드 기물 다시 그리기
-        setTimeout(updateBoard, 50);
-        console.log("상대방 수 적용 완료: " + data.move);
-    } else {
-        console.log("잘못된 수 수신: " + data.move);
-    }
-});
+        socket.on('opponent_move', function(data) {
+            // 상대방의 수를 내 엔진에 적용
+            var move = game.move(data.move); 
+            if (move !== null) {
+                board.position(game.fen()); 
+                setTimeout(updateBoard, 50);
+            }
+        });
     </script>
 </body>
 </html>
