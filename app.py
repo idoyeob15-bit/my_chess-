@@ -36,31 +36,39 @@ def handle_invite(data):
 @socketio.on('accept_invite')
 def handle_accept(data):
     inviter = data.get('from')   # 초대한 사람 (예: 'a')
-    accepter = data.get('to')     # 수락한 사람 (예: 'b')
+    accepter = data.get('to')    # 수락한 사람 (예: 'b')
     
     room = f"game_{inviter}_{accepter}"
     
-    # 수락한 사람(나) 방 입장은 당연히 하고
+    # [핵심 수정] 초대한 사람의 SID를 찾아서 방에 넣는 대신, 
+    # 양쪽 클라이언트가 'start_game'을 받으면 스스로 방에 들어오게 유도하는 게 가장 확실함.
+    # 일단 수락한 본인(흑)은 여기서 바로 입장
     join_room(room)
     
-    # [중요] 서버 측에서 "초대한 사람"도 이 방으로 오라고 신호를 보냄
-    # 프론트엔드에서 이 신호를 받으면 초대한 사람도 join_room을 실행하게 함
+    # 양쪽 유저에게 시작 신호 보냄
     emit('start_game', {'room': room, 'color': 'white'}, room=inviter)
     emit('start_game', {'room': room, 'color': 'black'}, room=accepter)
     
     print(f"🎮 [START] Room: {room} ({inviter} vs {accepter})")
 
-# 4. 체스 말 이동 공유 (★로그 추가됨!)
+# [추가] 클라이언트가 방에 직접 조인할 수 있는 전용 통로
+@socketio.on('join_chess_room')
+def handle_join_chess_room(data):
+    room = data.get('room')
+    if room:
+        join_room(room)
+        print(f"✅ [JOIN] User joined: {room}")
+
+# 4. 체스 말 이동 공유
 @socketio.on('move')
 def handle_move(data):
     room = data.get('room')
     move = data.get('move')
     
-    # 실시간으로 누가 어떤 수를 뒀는지 서버 로그에 찍히게 함!
-    print(f"📦 [MOVE] Room {room}: {move}") 
-    
-    # 상대방에게만 전송
-    emit('opponent_move', {'move': move}, room=room, include_self=False)
+    if room:
+        print(f"📦 [MOVE] Room {room}: {move}") 
+        # room=room으로 쏘면 해당 방의 모든 사람(나 제외)에게 전달됨
+        emit('opponent_move', {'move': move}, room=room, include_self=False)
 
 if __name__ == '__main__':
     # Render는 환경 변수 PORT를 사용함
