@@ -133,11 +133,21 @@
             setTimeout(updateBoard, 50); // 이동 후 즉시 업데이트
         }
 
-        socket.on('opponent_move', function(data) {
-            game.move(data.move);
-            board.position(game.fen());
-            setTimeout(updateBoard, 50);
-        });
+socket.on('opponent_move', function(data) {
+    // [수정] 상대방이 보낸 수를 내 엔진(game)에 적용한다!
+    var move = game.move(data.move); 
+
+    if (move !== null) {
+        // 엔진이 업데이트됐으니 화면 보드도 그 위치로 이동
+        board.position(game.fen()); 
+        
+        // 유니코드 기물 다시 그리기
+        setTimeout(updateBoard, 50);
+        console.log("상대방 수 적용 완료: " + data.move);
+    } else {
+        console.log("잘못된 수 수신: " + data.move);
+    }
+});
     </script>
 </body>
 </html>
