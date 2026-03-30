@@ -83,20 +83,26 @@
         }
 
         socket.on('start_game', function(data) {
+            console.log("🎮 게임 시작! 방 번호:", data.room);
             currentRoom = data.room; 
-            game = new Chess(); // 게임 객체 초기화
+            game = new Chess(); 
             myColor = data.color === 'white' ? 'w' : 'b';
-            $('#lobby').hide(); $('#game-area').show();
+            
+            $('#lobby').hide(); 
+            $('#game-area').show();
             $('#player-info').text("당신은 " + (data.color === 'white' ? "백(White)" : "흑(Black)") + "입니다.");
             
+            if (board) board.destroy(); // 기존 보드가 있으면 제거
+
             board = Chessboard('myBoard', {
                 draggable: true,
                 orientation: data.color,
                 position: 'start',
                 onDragStart: (source, piece) => {
-                    // [핵심 수정] 게임 종료 확인 + 내 기물만 드래그 가능 + 내 차례인지 확인
                     if (game.game_over()) return false;
+                    // 내 기물만 움직이기
                     if ((myColor === 'w' && piece.search(/^b/) !== -1) || (myColor === 'b' && piece.search(/^w/) !== -1)) return false;
+                    // 내 차례인지 확인
                     if ((game.turn() === 'w' && myColor !== 'w') || (game.turn() === 'b' && myColor !== 'b')) return false;
                 },
                 onDrop: handleMove,
@@ -121,17 +127,24 @@
             var move = game.move({from: source, to: target, promotion: 'q'});
             if (move === null) return 'snapback';
             
-            // 내 움직임을 서버로 전송
+            console.log("📤 내 수 전송:", move.san);
             socket.emit('move', {room: currentRoom, move: move.san});
+            
+            // 드롭 직후 시각적 업데이트
             setTimeout(updateBoard, 50);
         }
 
+        // [중요] 상대방 수 수신 로직 강화
         socket.on('opponent_move', function(data) {
-            // 상대방의 수를 내 엔진에 적용
+            console.log("📥 상대방 수 수신:", data.move);
+            
             var move = game.move(data.move); 
             if (move !== null) {
                 board.position(game.fen()); 
                 setTimeout(updateBoard, 50);
+                console.log("✅ 보드 업데이트 완료");
+            } else {
+                console.error("❌ 유효하지 않은 수 수신됨:", data.move);
             }
         });
     </script>
